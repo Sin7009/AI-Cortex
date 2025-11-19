@@ -4,6 +4,8 @@
 """
 import logging
 import os
+import asyncio
+from functools import partial
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart
@@ -54,7 +56,7 @@ async def document_handler(message: Message, bot: Bot) -> None:
     file = message.document
     file_name = file.file_name or "unknown"
 
-    if not (file_name.endswith(".docx") or file_name.endswith(".pdf")):
+    if not (file_name.lower().endswith(".docx") or file_name.lower().endswith(".pdf")):
         await message.reply("Пожалуйста, отправьте файл в формате .docx или .pdf.")
         return
 
@@ -71,11 +73,13 @@ async def document_handler(message: Message, bot: Bot) -> None:
             raise ValueError("Не удалось скачать файл.")
 
         # Парсим в зависимости от типа
+        loop = asyncio.get_running_loop()
         text = ""
-        if file_name.endswith(".pdf"):
-            text = parse_pdf(file_content.read())
-        elif file_name.endswith(".docx"):
-            text = parse_docx(file_content.read())
+        if file_name.lower().endswith(".pdf"):
+            # Запускаем синхронную функцию в отдельном потоке
+            text = await loop.run_in_executor(None, partial(parse_pdf, file_content.read()))
+        elif file_name.lower().endswith(".docx"):
+            text = await loop.run_in_executor(None, partial(parse_docx, file_content.read()))
 
         # Валидируем
         validation_result = await report_validator.validate(text)
