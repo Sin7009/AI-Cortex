@@ -5,6 +5,7 @@
 import logging
 import os
 import asyncio
+import uuid
 from functools import partial
 
 from aiogram import Bot, Dispatcher, F, Router
