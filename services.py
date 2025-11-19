@@ -17,6 +17,7 @@ from docx import Document as DocxDocument
 from pypdf import PdfReader
 from langchain_core.documents import Document
 from langchain_gigachat import GigaChat, GigaChatEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
 from mock_data import IDEAL_REPORTS, IDEAL_MESSAGES
@@ -81,24 +82,51 @@ class VectorDBManager:
         logging.info(f"ChromaDB инициализирован в директории: {persist_directory}")
 
     def _populate_collection(self, collection, data: list[dict]):
-        """Наполняет коллекцию данными, если она пуста."""
+        """Наполняет коллекцию данными с предварительной нарезкой (chunking)."""
         if collection.count() > 0:
             logging.info(f"Коллекция '{collection.name}' уже наполнена. Пропускаем.")
             return
 
-        logging.info(f"Наполняем коллекцию '{collection.name}'...")
-        documents = [item["text"] for item in data]
-        ids = [item["id"] for item in data]
+        logging.info(f"Наполняем коллекцию '{collection.name}' с нарезкой...")
 
-        # Генерируем эмбеддинги
-        embeddings = self.embeddings_model.embed_documents(documents)
-
-        collection.add(
-            embeddings=embeddings,
-            documents=documents,
-            ids=ids
+        # 1. Настраиваем нарезчик
+        # chunk_size=1000: размер куска ~2-3 абзаца
+        # chunk_overlap=200: перекрытие, чтобы не терять смысл на стыках
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", " ", ""] # Стараемся резать по абзацам
         )
-        logging.info(f"Коллекция '{collection.name}' успешно наполнена. Добавлено {len(ids)} документов.")
+
+        all_splits = []
+        all_ids = []
+        all_metadatas = []
+
+        for item in data:
+            # Создаем чанки из одного документа
+            # item["text"] берем из mock_data или файла
+            chunks = text_splitter.split_text(item["text"])
+
+            for i, chunk in enumerate(chunks):
+                all_splits.append(chunk)
+                # Уникальный ID для чанка: report_1_part_0, report_1_part_1...
+                all_ids.append(f"{item['id']}_part_{i}")
+                # В метаданных храним ID родительского документа, чтобы знать, откуда кусок
+                all_metadatas.append({"source_id": item["id"]})
+
+        # 2. Сохраняем кучу маленьких векторов вместо одного огромного
+        # Батчами по 100 штук (для стабильности)
+        batch_size = 100
+        for i in range(0, len(all_splits), batch_size):
+            end = min(i + batch_size, len(all_splits))
+            collection.add(
+                embeddings=self.embeddings_model.embed_documents(all_splits[i:end]),
+                documents=all_splits[i:end],
+                ids=all_ids[i:end],
+                metadatas=all_metadatas[i:end]
+            )
+
+        logging.info(f"Коллекция '{collection.name}' наполнена. Создано {len(all_splits)} чанков.")
 
     def populate_databases(self):
         """Наполняет базы данных 'идеальными' отчетами и сообщениями."""
@@ -151,9 +179,9 @@ class ReportValidator:
         Твоя задача — оценить предоставленный отчет на основе следующих критериев:
         1.  Наличие ключевых разделов: "Введение", "Методология", "Инсайты", "Выводы".
         2.  Общая структура и логика изложения.
-        3.  Сравнение с эталонным примером.
+        3.  Сравнение с наиболее релевантным фрагментом из нашей базы знаний.
 
-        **Эталонный пример отчета:**
+        **Релевантный фрагмент из эталонного отчета:**
         ---
         {context_report}
         ---
