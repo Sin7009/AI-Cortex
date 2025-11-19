@@ -9,6 +9,7 @@
 """
 import os
 import logging
+import re
 from io import BytesIO
 
 import chromadb
@@ -233,25 +234,31 @@ class MessageRewriter:
             return None
 
     def _parse_rewrite_response(self, response_text: str) -> dict[str, str] | None:
-        """Парсит ответ от LLM, разделяя его на составные части."""
+        """Парсит ответ от LLM с помощью Regex для большей надежности."""
         try:
-            # Очищаем ответ от возможных маркеров начала/конца
-            clean_text = response_text.replace("[START]", "").replace("[END]", "").strip()
+            # Убираем маркеры и лишние пробелы
+            text = response_text.replace("[START]", "").replace("[END]", "").strip()
 
-            critique_part, rest = clean_text.split("**Вариант 1 (Строго-официальный):**", 1)
-            variant1_part, variant2_part = rest.split("**Вариант 2 (Лаконично-деловой):**", 1)
+            # Паттерн ищет разделы, допуская небольшие вариации в форматировании
+            pattern = (
+                r"(?si)"  # s - точка матчит перенос строки, i - регистронезависимость
+                r"Что исправлено:?\s*(?P<critique>.*?)\s*"
+                r"\*\*?Вариант 1.*?:?\*\*?\s*(?P<v1>.*?)\s*"
+                r"\*\*?Вариант 2.*?:?\*\*?\s*(?P<v2>.*)$"
+            )
 
-            critique = critique_part.replace("**Что исправлено:**", "").strip()
-            variant1 = variant1_part.strip()
-            variant2 = variant2_part.strip()
+            match = re.search(pattern, text)
+            if not match:
+                logging.warning(f"Regex не сматчил ответ: {text[:100]}...")
+                return None
 
             return {
-                "critique": critique,
-                "variant1": variant1,
-                "variant2": variant2
+                "critique": match.group("critique").strip(),
+                "variant1": match.group("v1").strip(),
+                "variant2": match.group("v2").strip()
             }
-        except ValueError as e:
-            logging.error(f"Не удалось распарсить ответ LLM: {e}\nОтвет: {response_text}")
+        except Exception as e:
+            logging.error(f"Ошибка парсинга RegEx: {e}")
             return None
 
 
