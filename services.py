@@ -219,7 +219,17 @@ class ReportValidator:
             }
 
         # RAG: Находим самый похожий "идеальный" чанк
-        similar_report_chunks = self.db_manager.query_reports(report_text, n_results=1)
+        # Было:
+        # similar_report_chunks = self.db_manager.query_reports(report_text, n_results=1)
+
+        # Стало:
+        loop = asyncio.get_running_loop()
+        # Оборачиваем синхронный запрос к БД в отдельный поток
+        similar_report_chunks = await loop.run_in_executor(
+            None, 
+            partial(self.db_manager.query_reports, report_text[:4000], n_results=1) 
+        # Важно: ищем похожие только по первым 4000 символов, а не по всему тексту!
+        )
         context_report = similar_report_chunks[0] if similar_report_chunks else "Пример идеального отчета отсутствует."
 
         try:
