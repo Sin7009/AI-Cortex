@@ -251,57 +251,10 @@ class MessageRewriter:
         )
         logging.info("Сервис MessageRewriter инициализирован.")
 
-    def _is_crisis_communication(self, message_text: str) -> bool:
-        """Определяет, содержит ли сообщение признаки 'плохих новостей'."""
-        crisis_keywords = [
-            "проблема", "задержка", "сбой", "срыв", "риск",
-            "не успеваем", "не получается", "сломалось", "ошибка", "факап"
-        ]
-        text_lower = message_text.lower()
-        return any(keyword in text_lower for keyword in crisis_keywords)
-
-    async def _rewrite_crisis_message(self, message_text: str) -> str:
-        """Переписывает 'кризисное' сообщение по строгому шаблону."""
-        prompt = f"""
-        Ты — элитный ассистент CEO, специалист по кризисным коммуникациям.
-        Твоя задача — преобразовать эмоциональное и размытое сообщение о проблеме в четкий, структурированный "военный доклад".
-
-        **Инструкции:**
-        1.  Проанализируй "Оригинальный текст". Убери всю "воду", оправдания и эмоции.
-        2.  Извлеки только суть.
-        3.  Сформируй ответ строго по шаблону из 4-х пунктов. Если какой-то информации нет в оригинале, напиши "Не указано".
-
-        **Шаблон:**
-        **Факт:** [Что именно случилось? Кратко и без эмоций.]
-        **Причина:** [Почему это произошло? Коротко.]
-        **Решение:** [Что уже делается для исправления ситуации?]
-        **Помощь:** [Какая помощь требуется от руководителя прямо сейчас?]
-
-        **Оригинальный текст:**
-        ---
-        {message_text}
-        ---
-
-        **Твой ответ (строго по шаблону):**
+    async def rewrite(self, message_text: str) -> dict[str, str] | None:
         """
-        response = await self.llm.ainvoke(prompt)
-        return response.content
-
-    async def rewrite(self, message_text: str) -> dict | None:
+        Анализирует и переписывает сообщение, предлагая два варианта.
         """
-        Анализирует и переписывает сообщение, используя стандартный или кризисный протокол.
-        """
-        if self._is_crisis_communication(message_text):
-            logging.info("Обнаружено кризисное сообщение. Активирован 'Протокол плохих новостей'.")
-            try:
-                rewritten_text = await self._rewrite_crisis_message(message_text)
-                return {"type": "crisis", "text": rewritten_text}
-            except Exception as e:
-                logging.error(f"Ошибка при рерайте кризисного сообщения: {e}")
-                return None
-
-        # Стандартная логика рерайта
-        logging.info("Стандартное сообщение. Генерация двух вариантов.")
         prompt = f"""
         Ты — ассистент руководителя, мастер деловой переписки. Твоя задача — помочь пользователю улучшить черновик его сообщения для CEO.
 
@@ -335,10 +288,7 @@ class MessageRewriter:
             logging.info("Отправка запроса в GigaChat для рерайтинга сообщения...")
             response = await self.llm.ainvoke(prompt)
             logging.info("Получен ответ от GigaChat.")
-            parsed_data = self._parse_rewrite_response(response.content)
-            if parsed_data:
-                return {"type": "standard", "data": parsed_data}
-            return None
+            return self._parse_rewrite_response(response.content)
         except Exception as e:
             logging.error(f"Ошибка при вызове GigaChat API: {e}")
             return None

@@ -108,35 +108,23 @@ async def text_message_handler(message: Message) -> None:
     if not message.text:
         return
 
-    await message.reply("Анализирую ваше сообщение...")
+    await message.reply("Анализирую ваше сообщение и готовлю варианты...")
 
-    result = await message_rewriter.rewrite(message.text)
+    rewrite_result = await message_rewriter.rewrite(message.text)
 
-    if result is None:
+    if rewrite_result is None:
         await message.reply("К сожалению, не удалось обработать ваше сообщение. Попробуйте переформулировать его.")
         return
 
-    if result.get("type") == "crisis":
-        # Ответ для "плохих новостей"
-        response_text = (
-            f"🚨 {hbold('Протокол плохих новостей')}:\n\n"
-            f"{result['text']}"
-        )
-        await message.answer(response_text)
+    response_text = (
+        f"{hbold('Что исправлено:')}\n{rewrite_result['critique']}\n\n"
+        f"{hbold('Вариант 1 (Строго-официальный):')}\n{rewrite_result['variant1']}\n\n"
+        f"{hbold('Вариант 2 (Лаконично-деловой):')}\n{rewrite_result['variant2']}"
+    )
 
-    elif result.get("type") == "standard":
-        # Стандартный ответ с двумя вариантами
-        rewrite_data = result['data']
-        response_text = (
-            f"{hbold('Что исправлено:')}\n{rewrite_data['critique']}\n\n"
-            f"{hbold('Вариант 1 (Строго-официальный):')}\n{rewrite_data['variant1']}\n\n"
-            f"{hbold('Вариант 2 (Лаконично-деловой):')}\n{rewrite_data['variant2']}"
-        )
-        keyboard = create_rewrite_keyboard(rewrite_data['variant1'], rewrite_data['variant2'])
-        await message.answer(response_text, reply_markup=keyboard)
-    else:
-        logging.warning(f"Получен неизвестный тип ответа от MessageRewriter: {result.get('type')}")
-        await message.reply("Произошла внутренняя ошибка при обработке вашего сообщения.")
+    keyboard = create_rewrite_keyboard(rewrite_result['variant1'], rewrite_result['variant2'])
+
+    await message.answer(response_text, reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("rewrite_option_"))
