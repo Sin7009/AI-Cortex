@@ -7,6 +7,7 @@
 - VectorDBManager: Управляет созданием и наполнением векторной базы данных.
 - Функции для парсинга файлов .pdf и .docx.
 """
+import asyncio
 import os
 import logging
 import re
@@ -157,23 +158,8 @@ class ReportValidator:
         )
         logging.info("Сервис ReportValidator инициализирован.")
 
-    async def validate(self, report_text: str) -> str:
-        """
-        Проверяет отчет, используя RAG и LLM для анализа.
-        """
-        if not report_text.strip():
-            return "Отчет пуст. Пожалуйста, загрузите файл с текстом."
-
-        # 1. RAG: Находим самый похожий "идеальный" отчет
-        similar_report_texts = self.db_manager.query_reports(report_text, n_results=1)
-        if not similar_report_texts:
-            logging.warning("Не найдено похожих отчетов в базе знаний.")
-            # Если ничего не найдено, работаем без примера
-            context_report = "Пример идеального отчета отсутствует."
-        else:
-            context_report = similar_report_texts[0]
-
-        # 2. LLM Analysis: Формируем промпт и отправляем в GigaChat
+    async def _get_validation_result(self, report_text: str, context_report: str) -> str:
+        """Асинхронно получает результат валидации структуры отчета."""
         prompt = f"""
         Ты — строгий и опытный редактор, анализирующий отчеты для CEO.
         Твоя задача — оценить предоставленный отчет на основе следующих критериев:
@@ -196,15 +182,61 @@ class ReportValidator:
         **Статус:** [здесь напиши "Прошел" или "Требует доработки"]
         **Краткий анализ:** [здесь напиши 2-3 предложения с объяснением, что хорошо или что нужно улучшить, основываясь на критериях и сравнении с эталоном]
         """
+        response = await self.llm.ainvoke(prompt)
+        return response.content
+
+    async def summarize(self, report_text: str) -> str:
+        """Асинхронно генерирует Executive Summary для отчета."""
+        prompt = f"""
+        Ты — старший бизнес-аналитик, который готовит выжимку из отчета для CEO.
+        У тебя есть всего 30 секунд его внимания. Твоя задача — извлечь самую суть.
+
+        **Инструкции:**
+        1. Прочитай "Текст отчета".
+        2. Выдели **3 главных риска** и **3 главные возможности** (или ключевых вывода), которые в нем описаны.
+        3. Сформулируй их максимально коротко и ясно.
+        4. Если рисков или возможностей меньше трех (или нет совсем), укажи это.
+        5. Твой ответ должен быть только в формате списка, без вступлений.
+
+        **Текст отчета:**
+        ---
+        {report_text}
+        ---
+
+        **Твой ответ:**
+        """
+        response = await self.llm.ainvoke(prompt)
+        return response.content
+
+    async def validate(self, report_text: str) -> dict[str, str]:
+        """
+        Проверяет отчет и генерирует саммари, возвращая словарь с результатами.
+        """
+        if not report_text.strip():
+            return {
+                "validation": "Отчет пуст. Пожалуйста, загрузите файл с текстом.",
+                "summary": "Невозможно создать саммари для пустого отчета."
+            }
+
+        # RAG: Находим самый похожий "идеальный" чанк
+        similar_report_chunks = self.db_manager.query_reports(report_text, n_results=1)
+        context_report = similar_report_chunks[0] if similar_report_chunks else "Пример идеального отчета отсутствует."
 
         try:
-            logging.info("Отправка запроса в GigaChat для валидации отчета...")
-            response = await self.llm.ainvoke(prompt)
-            logging.info("Получен ответ от GigaChat.")
-            return response.content
+            logging.info("Одновременная отправка запросов на валидацию и саммари...")
+            validation_result, summary_result = await asyncio.gather(
+                self._get_validation_result(report_text, context_report),
+                self.summarize(report_text)
+            )
+            logging.info("Получены ответы на оба запроса.")
+            return {"validation": validation_result, "summary": summary_result}
+
         except Exception as e:
-            logging.error(f"Ошибка при вызове GigaChat API: {e}")
-            return "Произошла ошибка при анализе отчета. Попробуйте позже."
+            logging.error(f"Ошибка при параллельном вызове GigaChat API: {e}")
+            return {
+                "validation": "Произошла ошибка при анализе отчета.",
+                "summary": "Не удалось сгенерировать саммари из-за ошибки."
+            }
 
 
 class MessageRewriter:

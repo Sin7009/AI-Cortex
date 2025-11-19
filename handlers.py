@@ -81,9 +81,16 @@ async def document_handler(message: Message, bot: Bot) -> None:
         elif file_name.lower().endswith(".docx"):
             text = await loop.run_in_executor(None, partial(parse_docx, file_content.read()))
 
-        # Валидируем
-        validation_result = await report_validator.validate(text)
-        await message.reply(validation_result)
+        # Валидируем и получаем саммари
+        result = await report_validator.validate(text)
+
+        # Формируем красивый ответ
+        response_text = (
+            f"{result['validation']}\n\n"
+            f"--- 🏛️ Executive Summary ---\n"
+            f"{result['summary']}"
+        )
+        await message.reply(response_text)
 
     except (ValueError, TypeError) as e:
         logging.error(f"Ошибка обработки файла {file_name}: {e}")
