@@ -63,27 +63,24 @@ async def document_handler(message: Message, bot: Bot) -> None:
 
     await message.reply("Анализирую ваш отчет... Это может занять некоторое время.")
 
-    tmp_dir = "/tmp"
-    os.makedirs(tmp_dir, exist_ok=True)
-    # Генерируем уникальное имя файла, чтобы избежать конфликтов
-    tmp_file_path = os.path.join(tmp_dir, f"{uuid.uuid4()}_{file_name}")
-
     try:
-        # Скачиваем файл напрямую на диск
-        await bot.download(file=file.file_id, destination=tmp_file_path)
-        logging.info(f"Файл '{file_name}' временно сохранен в '{tmp_file_path}'.")
+        # Скачиваем файл
+        file_info = await bot.get_file(file.file_id)
+        if not file_info.file_path:
+            raise ValueError("Не удалось получить путь к файлу.")
 
-        # Читаем файл с диска для парсинга
-        with open(tmp_file_path, "rb") as f:
-            file_content_bytes = f.read()
+        file_content = await bot.download_file(file_info.file_path)
+        if not file_content:
+            raise ValueError("Не удалось скачать файл.")
 
-        # Парсим в зависимости от типа, вынося в отдельный поток
+        # Парсим в зависимости от типа
         loop = asyncio.get_running_loop()
         text = ""
         if file_name.lower().endswith(".pdf"):
-            text = await loop.run_in_executor(None, partial(parse_pdf, file_content_bytes))
+            # Запускаем синхронную функцию в отдельном потоке
+            text = await loop.run_in_executor(None, partial(parse_pdf, file_content.read()))
         elif file_name.lower().endswith(".docx"):
-            text = await loop.run_in_executor(None, partial(parse_docx, file_content_bytes))
+            text = await loop.run_in_executor(None, partial(parse_docx, file_content.read()))
 
         # Валидируем и получаем саммари
         result = await report_validator.validate(text)
@@ -96,14 +93,12 @@ async def document_handler(message: Message, bot: Bot) -> None:
         )
         await message.reply(response_text)
 
+    except (ValueError, TypeError) as e:
+        logging.error(f"Ошибка обработки файла {file_name}: {e}")
+        await message.reply(f"Произошла ошибка при обработке файла: {e}")
     except Exception as e:
         logging.error(f"Критическая ошибка при обработке файла {file_name}: {e}")
         await message.reply("Произошла непредвиденная ошибка. Попробуйте еще раз позже.")
-    finally:
-        # Гарантированно удаляем временный файл
-        if os.path.exists(tmp_file_path):
-            os.remove(tmp_file_path)
-            logging.info(f"Временный файл '{tmp_file_path}' удален.")
 
 
 @router.message(F.text)
@@ -114,35 +109,23 @@ async def text_message_handler(message: Message) -> None:
     if not message.text:
         return
 
-    await message.reply("Анализирую ваше сообщение...")
+    await message.reply("Анализирую ваше сообщение и готовлю варианты...")
 
-    result = await message_rewriter.rewrite(message.text)
+    rewrite_result = await message_rewriter.rewrite(message.text)
 
-    if result is None:
+    if rewrite_result is None:
         await message.reply("К сожалению, не удалось обработать ваше сообщение. Попробуйте переформулировать его.")
         return
 
-    if result.get("type") == "crisis":
-        # Ответ для "плохих новостей"
-        response_text = (
-            f"🚨 {hbold('Протокол плохих новостей')}:\n\n"
-            f"{result['text']}"
-        )
-        await message.answer(response_text)
+    response_text = (
+        f"{hbold('Что исправлено:')}\n{rewrite_result['critique']}\n\n"
+        f"{hbold('Вариант 1 (Строго-официальный):')}\n{rewrite_result['variant1']}\n\n"
+        f"{hbold('Вариант 2 (Лаконично-деловой):')}\n{rewrite_result['variant2']}"
+    )
 
-    elif result.get("type") == "standard":
-        # Стандартный ответ с двумя вариантами
-        rewrite_data = result['data']
-        response_text = (
-            f"{hbold('Что исправлено:')}\n{rewrite_data['critique']}\n\n"
-            f"{hbold('Вариант 1 (Строго-официальный):')}\n{rewrite_data['variant1']}\n\n"
-            f"{hbold('Вариант 2 (Лаконично-деловой):')}\n{rewrite_data['variant2']}"
-        )
-        keyboard = create_rewrite_keyboard(rewrite_data['variant1'], rewrite_data['variant2'])
-        await message.answer(response_text, reply_markup=keyboard)
-    else:
-        logging.warning(f"Получен неизвестный тип ответа от MessageRewriter: {result.get('type')}")
-        await message.reply("Произошла внутренняя ошибка при обработке вашего сообщения.")
+    keyboard = create_rewrite_keyboard(rewrite_result['variant1'], rewrite_result['variant2'])
+
+    await message.answer(response_text, reply_markup=keyboard)
 
 
 @router.callback_query(F.data.startswith("rewrite_option_"))
