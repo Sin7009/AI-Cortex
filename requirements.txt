@@ -7,3 +7,18 @@ python-dotenv
 langchain
 lark
 tiktoken
+
+# Опциональные зависимости для локальных моделей
+# Раскомментируйте нужные строки в зависимости от выбранного провайдера
+
+# Для Ollama (рекомендуется для Debian 12 VM)
+# langchain-ollama
+
+# Для HuggingFace моделей
+# langchain-huggingface
+# transformers
+# torch
+# accelerate
+
+# Для квантизации моделей (экономия памяти)
+# bitsandbytes
