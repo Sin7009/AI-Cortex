@@ -30,8 +30,8 @@
   * **Language:** Python 3.11+
   * **Framework:** `aiogram 3.x` (полностью асинхронная архитектура).
   * **LLM & Embeddings:** 
-      * **По умолчанию:** GigaChat Pro (SberDevices) + LangChain Integration.
-      * **Опционально:** Локальные модели через Ollama, HuggingFace (см. раздел "Выбор модели" ниже)
+      * **По умолчанию (MVP):** Ollama с локальными моделями (llama3.2, qwen2.5)
+      * **Опционально:** GigaChat Pro API, HuggingFace Transformers (см. раздел "Выбор модели" ниже)
   * **Vector Store:** ChromaDB (локальное персистентное хранилище).
   * **NLP & Parsing:** `langchain`, `pypdf`, `python-docx`, `Regular Expressions`.
   * **Security:** Поддержка работы в корпоративном контуре (`verify_ssl_certs=False`).
@@ -44,8 +44,8 @@
 
   * Python 3.10 или выше.
   * Telegram Bot Token.
-  * **Для внешнего API:** Доступ к API GigaChat.
-  * **Для локальной модели (опционально):** Debian 12 VM с Ollama или другим провайдером (см. [DEPLOYMENT.md](DEPLOYMENT.md)).
+  * **Для локальной модели (по умолчанию для MVP):** Debian 12 VM с Ollama (см. [DEPLOYMENT.md](DEPLOYMENT.md)).
+  * **Для внешнего API (опционально):** Доступ к API GigaChat.
 
 ### 1\. Клонирование репозитория
 
@@ -72,20 +72,22 @@ pip install -r requirements.txt
 
 Создайте файл `.env` в корне проекта и добавьте свои ключи:
 
-#### Вариант A: Использование внешнего GigaChat API (по умолчанию)
-
-```env
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-GIGACHAT_API_KEY=your_gigachat_auth_key
-MODEL_PROVIDER=gigachat
-```
-
-#### Вариант B: Использование локальной модели через Ollama
+#### Вариант A: Использование локальной модели через Ollama (по умолчанию для MVP)
 
 ```env
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 MODEL_PROVIDER=ollama
 OLLAMA_MODEL=llama3.2
+```
+
+**Для автоматической установки Ollama на Debian 12: `bash setup_debian12.sh`**
+
+#### Вариант B: Использование внешнего GigaChat API
+
+```env
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+MODEL_PROVIDER=gigachat
+GIGACHAT_API_KEY=your_gigachat_auth_key
 ```
 
 **Для детальных инструкций по развертыванию локальной модели на Debian 12, см. [DEPLOYMENT.md](DEPLOYMENT.md)**
@@ -114,9 +116,16 @@ python main.py
 
 -----
 
-## Выбор модели: Внешний API vs Локальная модель
+## Выбор модели: Локальная модель vs Внешний API
 
-Система поддерживает как внешний GigaChat API, так и локальные модели. Выбор зависит от ваших требований:
+Система поддерживает как локальные модели (Ollama - по умолчанию для MVP), так и внешний GigaChat API. Выбор зависит от ваших требований:
+
+### ✅ Используйте **Ollama** (локальная модель, **по умолчанию для MVP**), если:
+
+- Есть требования к конфиденциальности данных ✅
+- Хотите избежать рекуррентных затрат на API ✅
+- Есть собственный сервер (например, VM на Debian 12) ✅
+- Нужен полный контроль над моделью и её поведением ✅
 
 ### ✅ Используйте **GigaChat API** (внешний), если:
 
@@ -124,13 +133,6 @@ python main.py
 - Непредсказуемая нагрузка
 - Нет серверной инфраструктуры
 - Хотите всегда актуальную модель с автоматическими обновлениями
-
-### ✅ Используйте **Локальную модель**, если:
-
-- Есть требования к конфиденциальности данных
-- Хотите избежать рекуррентных затрат на API
-- Есть собственный сервер (например, VM на Debian 12)
-- Нужен полный контроль над моделью и её поведением
 
 ### Сравнение характеристик
 

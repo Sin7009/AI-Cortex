@@ -171,25 +171,25 @@ def get_model_provider() -> ModelProvider:
     Фабричная функция для получения провайдера модели на основе переменной окружения.
     
     Переменная окружения MODEL_PROVIDER может принимать значения:
-    - 'gigachat' (по умолчанию): Внешний GigaChat API
-    - 'ollama': Локальная модель через Ollama
+    - 'ollama' (по умолчанию): Локальная модель через Ollama
+    - 'gigachat': Внешний GigaChat API
     - 'huggingface': Локальная модель через HuggingFace
     
     Returns:
         ModelProvider: Экземпляр выбранного провайдера
     """
-    provider_type = os.getenv("MODEL_PROVIDER", "gigachat").lower()
+    provider_type = os.getenv("MODEL_PROVIDER", "ollama").lower()
     
-    if provider_type == "ollama":
-        model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
-        logging.info(f"📦 Использование локального провайдера: Ollama ({model_name})")
-        return OllamaProvider(model_name=model_name)
+    if provider_type == "gigachat":
+        logging.info("📦 Использование внешнего провайдера: GigaChat API")
+        return GigaChatProvider()
     
     elif provider_type == "huggingface":
         model_name = os.getenv("HUGGINGFACE_MODEL", "IlyaGusev/saiga_llama3_8b")
         logging.info(f"📦 Использование локального провайдера: HuggingFace ({model_name})")
         return HuggingFaceProvider(model_name=model_name)
     
-    else:  # по умолчанию gigachat
-        logging.info("📦 Использование внешнего провайдера: GigaChat API")
-        return GigaChatProvider()
+    else:  # по умолчанию ollama
+        model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
+        logging.info(f"📦 Использование локального провайдера: Ollama ({model_name})")
+        return OllamaProvider(model_name=model_name)

@@ -1,5 +1,4 @@
 aiogram>=3.2.0
-langchain-gigachat
 chromadb
 pypdf
 python-docx
@@ -9,15 +8,19 @@ lark
 tiktoken
 
 # ============================================
-# Опциональные зависимости для локальных моделей
+# Model Provider: Ollama (по умолчанию для MVP)
+# ============================================
+langchain-ollama
+
+# ============================================
+# Опциональные зависимости для других провайдеров
 # ============================================
 # Раскомментируйте нужную секцию в зависимости от выбранного провайдера:
 
-# --- Для Ollama (рекомендуется для Debian 12 VM) ---
-# Простая установка, хорошая производительность, легкое управление моделями
-# Используйте если: MODEL_PROVIDER=ollama
+# --- Для GigaChat API (внешний) ---
+# Используйте если: MODEL_PROVIDER=gigachat
 #
-# langchain-ollama
+# langchain-gigachat
 
 # --- Для HuggingFace моделей (для продвинутых пользователей) ---
 # Больше контроля, больше моделей, требуется GPU для хорошей производительности
@@ -37,13 +40,14 @@ tiktoken
 # Инструкции по установке:
 # ============================================
 # 
-# 1. Для GigaChat API (по умолчанию):
+# 1. Для Ollama (по умолчанию, MVP):
 #    pip install -r requirements.txt
+#    bash setup_debian12.sh  # Автоматическая установка Ollama
 #
-# 2. Для Ollama на Debian 12:
+# 2. Для GigaChat API (внешний):
 #    pip install -r requirements.txt
-#    pip install langchain-ollama
-#    bash setup_debian12.sh
+#    pip install langchain-gigachat
+#    # Настройте GIGACHAT_API_KEY в .env
 #
 # 3. Для HuggingFace:
 #    pip install -r requirements.txt
