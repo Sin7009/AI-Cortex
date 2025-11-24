@@ -30,7 +30,7 @@ sudo apt update && sudo apt upgrade -y
 
 # Установка необходимых пакетов
 echo "📦 Установка зависимостей..."
-sudo apt install -y curl git build-essential python3 python3-pip python3-venv
+sudo apt install -y curl git build-essential python3 python3-pip
 
 # Установка Ollama
 echo "🚀 Установка Ollama..."
@@ -105,24 +105,30 @@ echo ""
 echo "📋 Установленные модели:"
 ollama list
 
+# Установка uv
+echo ""
+echo "📦 Установка uv (быстрого менеджера пакетов Python)..."
+if command -v uv &> /dev/null; then
+    echo -e "${YELLOW}⚠ uv уже установлен${NC}"
+else
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Добавляем uv в PATH для текущей сессии
+    export PATH="$HOME/.cargo/bin:$PATH"
+    echo -e "${GREEN}✓ uv успешно установлен${NC}"
+fi
+
+# Проверка версии uv
+echo ""
+echo "Версия uv:"
+uv --version
+
 # Настройка проекта AI-Cortex
 echo ""
 echo "🔧 Настройка проекта AI-Cortex..."
 
-# Создание виртуального окружения
-if [ ! -d "venv" ]; then
-    echo "📦 Создание виртуального окружения..."
-    python3 -m venv venv
-fi
-
-# Активация виртуального окружения
-source venv/bin/activate
-
-# Установка зависимостей Python
-echo "📦 Установка зависимостей Python..."
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install langchain-ollama
+# Установка зависимостей Python с помощью uv
+echo "📦 Установка зависимостей Python с помощью uv..."
+uv sync
 
 # Создание .env файла, если его нет
 if [ ! -f ".env" ]; then
@@ -179,8 +185,8 @@ Requires=ollama.service
 Type=simple
 User=$USER_NAME
 WorkingDirectory=$SCRIPT_DIR
-Environment="PATH=$SCRIPT_DIR/venv/bin"
-ExecStart=$SCRIPT_DIR/venv/bin/python $SCRIPT_DIR/main.py
+Environment="PATH=$SCRIPT_DIR/.venv/bin"
+ExecStart=$SCRIPT_DIR/.venv/bin/python $SCRIPT_DIR/main.py
 Restart=always
 RestartSec=10
 
@@ -209,7 +215,10 @@ echo "1. Проверьте настройки в файле .env"
 echo "   nano .env"
 echo ""
 echo "2. Запустите бота:"
-echo "   source venv/bin/activate"
+echo "   uv run python main.py"
+echo ""
+echo "   Или активируйте виртуальное окружение:"
+echo "   source .venv/bin/activate"
 echo "   python main.py"
 echo ""
 if [ "$create_service" = "y" ] || [ "$create_service" = "Y" ]; then

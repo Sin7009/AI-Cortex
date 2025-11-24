@@ -1,0 +1,59 @@
+[project]
+name = "ai-cortex"
+version = "0.1.0"
+description = "AI-Assistant for Executive Communication - интеллектуальная система премодерации и улучшения контента"
+authors = [
+    { name = "Sin7009", email = "sin7009@example.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram>=3.2.0",
+    "chromadb",
+    "pypdf",
+    "python-docx",
+    "python-dotenv",
+    "langchain",
+    "lark",
+    "tiktoken",
+    "langchain-ollama",
+]
+
+[project.optional-dependencies]
+# Для GigaChat API (внешний)
+gigachat = [
+    "langchain-gigachat",
+]
+
+# Для HuggingFace моделей (для продвинутых пользователей)
+huggingface = [
+    "langchain-huggingface",
+    "transformers>=4.35.0",
+    "torch>=2.0.0",
+    "accelerate>=0.24.0",
+]
+
+# Квантизация для экономии памяти
+quantization = [
+    "bitsandbytes>=0.41.0",
+]
+
+# Все опциональные зависимости
+all = [
+    "ai-cortex[gigachat,huggingface,quantization]",
+]
+
+[project.urls]
+Homepage = "https://github.com/Sin7009/AI-Cortex"
+Repository = "https://github.com/Sin7009/AI-Cortex"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

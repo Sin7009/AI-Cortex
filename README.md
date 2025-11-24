@@ -43,29 +43,51 @@
 ### Предварительные требования
 
   * Python 3.10 или выше.
+  * [uv](https://github.com/astral-sh/uv) - быстрый менеджер пакетов Python (см. установку ниже).
   * Telegram Bot Token.
   * **Для локальной модели (по умолчанию для MVP):** Debian 12 VM с Ollama (см. [DEPLOYMENT.md](DEPLOYMENT.md)).
   * **Для внешнего API (опционально):** Доступ к API GigaChat.
 
-### 1\. Клонирование репозитория
+### 1\. Установка uv
+
+**macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows:**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Или через pipx:
+```bash
+pipx install uv
+```
+
+### 2\. Клонирование репозитория
 
 ```bash
 git clone https://github.com/your-username/ai-cortex.git
 cd ai-cortex
 ```
 
-### 2\. Создание виртуального окружения
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Для macOS/Linux
-venv\Scripts\activate     # Для Windows
-```
-
 ### 3\. Установка зависимостей
 
+uv автоматически создаст виртуальное окружение и установит все зависимости:
+
 ```bash
-pip install -r requirements.txt
+uv sync
+```
+
+Для установки с опциональными зависимостями (например, GigaChat):
+```bash
+uv sync --extra gigachat
+```
+
+Для установки всех опциональных зависимостей:
+```bash
+uv sync --all-extras
 ```
 
 ### 4\. Настройка окружения
@@ -95,6 +117,13 @@ GIGACHAT_API_KEY=your_gigachat_auth_key
 ### 5\. Запуск
 
 ```bash
+uv run python main.py
+```
+
+Или активируйте виртуальное окружение и запустите напрямую:
+```bash
+source .venv/bin/activate  # Для macOS/Linux
+.venv\Scripts\activate     # Для Windows
 python main.py
 ```
 
