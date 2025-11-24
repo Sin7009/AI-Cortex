@@ -87,10 +87,6 @@ class VectorDBManager:
 
     def _populate_collection(self, collection, data: list[dict]):
         """Наполняет коллекцию данными с предварительной нарезкой (chunking)."""
-        if collection.count() > 0:
-            logging.info(f"Коллекция '{collection.name}' уже наполнена. Пропускаем.")
-            return
-
         logging.info(f"Наполняем коллекцию '{collection.name}' с нарезкой...")
 
         # 1. Настраиваем нарезчик
@@ -123,14 +119,48 @@ class VectorDBManager:
         batch_size = 100
         for i in range(0, len(all_splits), batch_size):
             end = min(i + batch_size, len(all_splits))
-            collection.add(
+            collection.upsert(
                 embeddings=self.model_provider.embed_documents(all_splits[i:end]),
                 documents=all_splits[i:end],
                 ids=all_ids[i:end],
                 metadatas=all_metadatas[i:end]
             )
 
-        logging.info(f"Коллекция '{collection.name}' наполнена. Создано {len(all_splits)} чанков.")
+        logging.info(f"Коллекция '{collection.name}' обновлена. Обработано {len(all_splits)} чанков.")
+
+    def load_real_data(self):
+        """Загружает реальные файлы из папки knowledge_base."""
+        # 1. Загрузка сообщений (Примеры стиля)
+        real_messages = []
+        for filepath in glob.glob("knowledge_base/messages/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_messages.append({
+                        "id": f"msg_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла сообщения {filepath}: {e}")
+
+        if real_messages:
+            self._populate_collection(self.messages_collection, real_messages)
+
+        # 2. Загрузка отчетов (для валидации)
+        real_reports = []
+        for filepath in glob.glob("knowledge_base/reports/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_reports.append({
+                        "id": f"rep_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла отчета {filepath}: {e}")
+
+        if real_reports:
+            self._populate_collection(self.reports_collection, real_reports)
 
     def load_real_data(self):
         """Загружает реальные файлы из папки knowledge_base."""
@@ -168,9 +198,17 @@ class VectorDBManager:
 
     def populate_databases(self):
         """Наполняет базы данных 'идеальными' отчетами и сообщениями."""
-        self._populate_collection(self.reports_collection, IDEAL_REPORTS)
-        self._populate_collection(self.messages_collection, IDEAL_MESSAGES)
-        # Загрузка реальных данных
+        # Наполняем mock-данными только если коллекции пусты
+        if self.reports_collection.count() == 0:
+            logging.info("Инициализация mock-данных для отчетов...")
+            self._populate_collection(self.reports_collection, IDEAL_REPORTS)
+
+        if self.messages_collection.count() == 0:
+            logging.info("Инициализация mock-данных для сообщений...")
+            self._populate_collection(self.messages_collection, IDEAL_MESSAGES)
+
+        # Загрузка реальных данных (выполняется всегда для обновления)
+        logging.info("Проверка и загрузка реальных данных...")
         self.load_real_data()
 
     def query_reports(self, text: str, n_results: int = 1) -> list[str]:
