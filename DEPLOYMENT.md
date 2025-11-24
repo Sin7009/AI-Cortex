@@ -153,15 +153,20 @@ OLLAMA_BASE_URL=http://localhost:11434  # или IP вашего сервера
 ```bash
 cd /path/to/AI-Cortex
 
-# Создаем виртуальное окружение
-python3 -m venv venv
-source venv/bin/activate
+# Установка uv (если еще не установлен)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# Устанавливаем зависимости с поддержкой Ollama
-pip install -r requirements.txt
-pip install langchain-ollama
+# Установка зависимостей с помощью uv
+uv sync
 
-# Запускаем бота
+# Запуск бота
+uv run python main.py
+```
+
+Или активируйте виртуальное окружение вручную:
+```bash
+source .venv/bin/activate
 python main.py
 ```
 
@@ -202,12 +207,8 @@ curl http://localhost:11434/api/generate -d '{
 # Устанавливаем CUDA (если есть NVIDIA GPU)
 # Инструкции: https://developer.nvidia.com/cuda-downloads
 
-# Устанавливаем PyTorch с поддержкой CUDA
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Устанавливаем Transformers и зависимости
-pip install transformers accelerate bitsandbytes
-pip install langchain-huggingface
+# Устанавливаем зависимости с помощью uv
+uv sync --extra huggingface
 
 # Настраиваем .env
 MODEL_PROVIDER=huggingface
@@ -238,7 +239,8 @@ vLLM - это высокопроизводительный inference серве�
 
 ```bash
 # Требуется Python 3.8-3.11
-pip install vllm
+# Установка vLLM (требуется дополнительная настройка)
+uv pip install vllm
 
 # Запуск сервера
 python -m vllm.entrypoints.openai.api_server \
@@ -414,8 +416,8 @@ Requires=ollama.service
 Type=simple
 User=your_user
 WorkingDirectory=/path/to/AI-Cortex
-Environment="PATH=/path/to/AI-Cortex/venv/bin"
-ExecStart=/path/to/AI-Cortex/venv/bin/python main.py
+Environment="PATH=/path/to/AI-Cortex/.venv/bin"
+ExecStart=/path/to/AI-Cortex/.venv/bin/python main.py
 Restart=always
 RestartSec=10
 
