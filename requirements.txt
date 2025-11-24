@@ -1,4 +1,5 @@
 aiogram>=3.2.0
+langchain-gigachat
 chromadb
 pypdf
 python-docx
@@ -6,51 +7,8 @@ python-dotenv
 langchain
 lark
 tiktoken
-
-# ============================================
-# Model Provider: Ollama (по умолчанию для MVP)
-# ============================================
+# Новые зависимости:
+langchain-openai
+langchain-huggingface
+sentence-transformers
 langchain-ollama
-
-# ============================================
-# Опциональные зависимости для других провайдеров
-# ============================================
-# Раскомментируйте нужную секцию в зависимости от выбранного провайдера:
-
-# --- Для GigaChat API (внешний) ---
-# Используйте если: MODEL_PROVIDER=gigachat
-#
-# langchain-gigachat
-
-# --- Для HuggingFace моделей (для продвинутых пользователей) ---
-# Больше контроля, больше моделей, требуется GPU для хорошей производительности
-# Используйте если: MODEL_PROVIDER=huggingface
-#
-# langchain-huggingface
-# transformers>=4.35.0
-# torch>=2.0.0
-# accelerate>=0.24.0
-
-# --- Опционально: Квантизация для экономии памяти ---
-# Используйте для запуска больших моделей на меньшем железе
-#
-# bitsandbytes>=0.41.0
-
-# ============================================
-# Инструкции по установке:
-# ============================================
-# 
-# 1. Для Ollama (по умолчанию, MVP):
-#    pip install -r requirements.txt
-#    bash setup_debian12.sh  # Автоматическая установка Ollama
-#
-# 2. Для GigaChat API (внешний):
-#    pip install -r requirements.txt
-#    pip install langchain-gigachat
-#    # Настройте GIGACHAT_API_KEY в .env
-#
-# 3. Для HuggingFace:
-#    pip install -r requirements.txt
-#    pip install langchain-huggingface transformers torch accelerate
-#
-# Подробности: см. DEPLOYMENT.md
