@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Модуль для абстракции различных провайдеров моделей (внешние API и локальные модели).
-
-Поддерживаемые провайдеры:
-- GigaChat API (внешний, по умолчанию)
-- Ollama (локальная модель)
-- HuggingFace (локальная модель)
+Модуль для абстракции различных провайдеров моделей.
 """
 import os
 import logging
@@ -25,171 +20,137 @@ class ModelProvider(ABC):
 
     @abstractmethod
     async def ainvoke(self, prompt: str) -> str:
-        """Асинхронно вызывает модель с промптом и возвращает ответ."""
         pass
 
     @abstractmethod
     def embed_query(self, text: str) -> List[float]:
-        """Генерирует эмбеддинги для одного текстового запроса."""
         pass
 
     @abstractmethod
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Генерирует эмбеддинги для списка документов."""
         pass
 
 
-class GigaChatProvider(ModelProvider):
-    """Провайдер для использования внешнего GigaChat API."""
+class OpenRouterProvider(ModelProvider):
+    """
+    Провайдер для OpenRouter (Grok, Claude, GPT и др.).
+    Использует API OpenRouter для генерации текста и локальную модель HuggingFace для эмбеддингов.
+    """
+    def __init__(self):
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_huggingface import HuggingFaceEmbeddings
+            import torch
 
+            # 1. Настройка LLM (Grok)
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            model_name = os.getenv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast:free")
+            
+            if not api_key:
+                raise ValueError("Не найден OPENROUTER_API_KEY в .env")
+
+            self.llm = ChatOpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=api_key,
+                model=model_name,
+                temperature=0.2, # Низкая температура для строгости
+                # Важно для OpenRouter: передаем заголовки, чтобы они знали источник
+                default_headers={
+                    "HTTP-Referer": "https://github.com/ai-cortex",
+                    "X-Title": "AI Cortex Bot"
+                }
+            )
+
+            # 2. Настройка Эмбеддингов (Локально, бесплатно и качественно)
+            # Используем E5-Large — одну из лучших моделей для русского языка
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logging.info(f"⏳ Загрузка модели эмбеддингов на {device}...")
+
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="intfloat/multilingual-e5-large",
+                model_kwargs={'device': device}
+            )
+
+            logging.info(f"✅ OpenRouter провайдер готов: {model_name} + E5-Embeddings")
+
+        except ImportError:
+            logging.error("❌ Не установлены пакеты. Выполните: pip install langchain-openai langchain-huggingface sentence-transformers")
+            raise
+        except Exception as e:
+            logging.error(f"❌ Ошибка инициализации OpenRouter: {e}")
+            raise
+
+    async def ainvoke(self, prompt: str) -> str:
+        response = await self.llm.ainvoke(prompt)
+        return response.content
+
+    def embed_query(self, text: str) -> List[float]:
+        return self.embeddings.embed_query(text)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.embeddings.embed_documents(texts)
+
+
+# --- Старые провайдеры оставляем для совместимости ---
+
+class GigaChatProvider(ModelProvider):
     def __init__(self):
         try:
             from langchain_gigachat import GigaChat, GigaChatEmbeddings
-            
-            self.llm = GigaChat(
-                credentials=os.getenv("GIGACHAT_API_KEY"),
-                verify_ssl_certs=False,
-                model="GigaChat-Pro"
-            )
-            self.embeddings = GigaChatEmbeddings(
-                credentials=os.getenv("GIGACHAT_API_KEY"),
-                verify_ssl_certs=False
-            )
+            self.llm = GigaChat(credentials=os.getenv("GIGACHAT_API_KEY"), verify_ssl_certs=False, model="GigaChat-Pro")
+            self.embeddings = GigaChatEmbeddings(credentials=os.getenv("GIGACHAT_API_KEY"), verify_ssl_certs=False)
             logging.info("✅ GigaChat API провайдер успешно инициализирован")
         except Exception as e:
-            logging.error(f"❌ Ошибка инициализации GigaChat API: {e}")
+            logging.error(f"❌ Ошибка GigaChat: {e}")
             raise
 
     async def ainvoke(self, prompt: str) -> str:
-        """Асинхронно вызывает GigaChat API."""
         response = await self.llm.ainvoke(prompt)
         return response.content
 
     def embed_query(self, text: str) -> List[float]:
-        """Генерирует эмбеддинги через GigaChat."""
         return self.embeddings.embed_query(text)
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Генерирует эмбеддинги для документов через GigaChat."""
         return self.embeddings.embed_documents(texts)
 
-
 class OllamaProvider(ModelProvider):
-    """Провайдер для использования локальной модели через Ollama."""
-
     def __init__(self, model_name: str = None):
         try:
             from langchain_ollama import ChatOllama, OllamaEmbeddings
-            
             self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.2")
-            self.llm = ChatOllama(model=self.model_name)
+            self.llm = ChatOllama(model=self.model_name, temperature=0.2)
             self.embeddings = OllamaEmbeddings(model=self.model_name)
-            logging.info(f"✅ Ollama провайдер успешно инициализирован с моделью: {self.model_name}")
-        except ImportError:
-            logging.error("❌ Пакет langchain-ollama не установлен. Установите: pip install langchain-ollama")
-            raise
+            logging.info(f"✅ Ollama провайдер успешно инициализирован: {self.model_name}")
         except Exception as e:
-            logging.error(f"❌ Ошибка инициализации Ollama: {e}. Убедитесь, что Ollama запущен локально.")
+            logging.error(f"❌ Ошибка Ollama: {e}")
             raise
 
     async def ainvoke(self, prompt: str) -> str:
-        """Асинхронно вызывает локальную модель через Ollama."""
         response = await self.llm.ainvoke(prompt)
         return response.content
 
     def embed_query(self, text: str) -> List[float]:
-        """Генерирует эмбеддинги через Ollama."""
         return self.embeddings.embed_query(text)
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Генерирует эмбеддинги для документов через Ollama."""
-        return self.embeddings.embed_documents(texts)
-
-
-class HuggingFaceProvider(ModelProvider):
-    """Провайдер для использования локальных моделей через HuggingFace."""
-
-    def __init__(self, model_name: str = None):
-        try:
-            from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
-            from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-            import torch
-            
-            self.model_name = model_name or os.getenv("HUGGINGFACE_MODEL", "IlyaGusev/saiga_llama3_8b")
-            self.device = 0 if torch.cuda.is_available() else -1
-            
-            # Инициализация LLM для генерации текста
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None
-            )
-            
-            pipe = pipeline(
-                "text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_new_tokens=1024,
-                device=self.device
-            )
-            self.llm = HuggingFacePipeline(pipeline=pipe)
-            
-            # Инициализация эмбеддингов
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="intfloat/multilingual-e5-large",
-                model_kwargs={'device': 'cuda' if torch.cuda.is_available() else 'cpu'}
-            )
-            
-            logging.info(f"✅ HuggingFace провайдер успешно инициализирован с моделью: {self.model_name}")
-            logging.info(f"   Использование GPU: {torch.cuda.is_available()}")
-        except ImportError:
-            logging.error("❌ Необходимые пакеты не установлены. Установите: pip install langchain-huggingface transformers torch")
-            raise
-        except Exception as e:
-            logging.error(f"❌ Ошибка инициализации HuggingFace: {e}")
-            raise
-
-    async def ainvoke(self, prompt: str) -> str:
-        """Асинхронно вызывает локальную модель HuggingFace."""
-        import asyncio
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(None, self.llm.invoke, prompt)
-        return response
-
-    def embed_query(self, text: str) -> List[float]:
-        """Генерирует эмбеддинги через HuggingFace."""
-        return self.embeddings.embed_query(text)
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Генерирует эмбеддинги для документов через HuggingFace."""
         return self.embeddings.embed_documents(texts)
 
 
 def get_model_provider() -> ModelProvider:
-    """
-    Фабричная функция для получения провайдера модели на основе переменной окружения.
+    """Фабрика провайдеров."""
+    provider_type = os.getenv("MODEL_PROVIDER", "openrouter").lower()
     
-    Переменная окружения MODEL_PROVIDER может принимать значения:
-    - 'ollama' (по умолчанию): Локальная модель через Ollama
-    - 'gigachat': Внешний GigaChat API
-    - 'huggingface': Локальная модель через HuggingFace
+    if provider_type == "openrouter":
+        return OpenRouterProvider()
     
-    Returns:
-        ModelProvider: Экземпляр выбранного провайдера
-    """
-    provider_type = os.getenv("MODEL_PROVIDER", "ollama").lower()
-    
-    if provider_type == "gigachat":
-        logging.info("📦 Использование внешнего провайдера: GigaChat API")
+    elif provider_type == "gigachat":
         return GigaChatProvider()
     
-    elif provider_type == "huggingface":
-        model_name = os.getenv("HUGGINGFACE_MODEL", "IlyaGusev/saiga_llama3_8b")
-        logging.info(f"📦 Использование локального провайдера: HuggingFace ({model_name})")
-        return HuggingFaceProvider(model_name=model_name)
+    elif provider_type == "ollama":
+        return OllamaProvider()
     
-    else:  # по умолчанию ollama
-        model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
-        logging.info(f"📦 Использование локального провайдера: Ollama ({model_name})")
-        return OllamaProvider(model_name=model_name)
+    else:
+        # Fallback или HuggingFace (если нужно вернуть, добавь класс обратно)
+        logging.warning(f"Провайдер {provider_type} не найден, переключаемся на OpenRouter")
+        return OpenRouterProvider()
