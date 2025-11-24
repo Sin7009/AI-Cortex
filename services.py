@@ -11,13 +11,14 @@ import asyncio
 import os
 import logging
 import re
+import glob
 from io import BytesIO
 
 import chromadb
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from langchain_core.documents import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
 from mock_data import IDEAL_REPORTS, IDEAL_MESSAGES
@@ -131,10 +132,46 @@ class VectorDBManager:
 
         logging.info(f"Коллекция '{collection.name}' наполнена. Создано {len(all_splits)} чанков.")
 
+    def load_real_data(self):
+        """Загружает реальные файлы из папки knowledge_base."""
+        # 1. Загрузка сообщений (Примеры стиля)
+        real_messages = []
+        for filepath in glob.glob("knowledge_base/messages/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_messages.append({
+                        "id": f"msg_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла сообщения {filepath}: {e}")
+
+        if real_messages:
+            self._populate_collection(self.messages_collection, real_messages)
+
+        # 2. Загрузка отчетов (для валидации)
+        real_reports = []
+        for filepath in glob.glob("knowledge_base/reports/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_reports.append({
+                        "id": f"rep_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла отчета {filepath}: {e}")
+
+        if real_reports:
+            self._populate_collection(self.reports_collection, real_reports)
+
     def populate_databases(self):
         """Наполняет базы данных 'идеальными' отчетами и сообщениями."""
         self._populate_collection(self.reports_collection, IDEAL_REPORTS)
         self._populate_collection(self.messages_collection, IDEAL_MESSAGES)
+        # Загрузка реальных данных
+        self.load_real_data()
 
     def query_reports(self, text: str, n_results: int = 1) -> list[str]:
         """Ищет похожие документы в коллекции отчетов."""
@@ -284,12 +321,12 @@ class MessageRewriter:
     """
     Сервис для рерайтинга сообщений. Использует LLM для критики и предложения вариантов.
     """
-    def __init__(self, model_provider=None):
-        # Используем переданный провайдер или создаем новый
+    def __init__(self, db_manager: VectorDBManager, model_provider=None):
+        # !!! ВАЖНО: Мы теперь требуем db_manager
+        self.db_manager = db_manager
         if model_provider is None:
             model_provider = get_model_provider()
         self.model_provider = model_provider
-        
         logging.info("Сервис MessageRewriter инициализирован.")
 
     def _is_crisis_communication(self, message_text: str) -> bool:
@@ -342,17 +379,42 @@ class MessageRewriter:
                 return None
 
         # Стандартная логика рерайта
+
+        # 1. ДОСТАЕМ ПРИМЕРЫ (Few-Shot)
+        # Ищем 3 ближайших идеальных сообщения из базы
+        loop = asyncio.get_running_loop()
+        try:
+             # Эмбеддинг запроса для поиска похожих по стилю/смыслу
+            query_embedding = self.model_provider.embed_query(message_text)
+            results = await loop.run_in_executor(
+                None,
+                lambda: self.db_manager.messages_collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=3
+                )
+            )
+            examples_list = results['documents'][0] if results['documents'] else []
+            examples_text = "\n---\n".join(examples_list)
+        except Exception as e:
+            logging.error(f"Ошибка получения примеров RAG: {e}")
+            examples_text = "Примеры недоступны."
+
         logging.info("Стандартное сообщение. Генерация двух вариантов.")
+
+        # 2. ОБНОВЛЕННЫЙ ПРОМПТ С ПРИМЕРАМИ
         prompt = f"""
-        Ты — ассистент руководителя, мастер деловой переписки. Твоя задача — помочь пользователю улучшить черновик его сообщения для CEO.
+        Ты — ассистент руководителя. Твоя задача — переписать сообщение пользователя, опираясь на ПРИМЕРЫ ИДЕАЛЬНОГО СТИЛЯ.
+
+        **Примеры того, как НАДО писать (Идеальный стиль):**
+        ---
+        {examples_text}
+        ---
 
         **Инструкции:**
-        1.  Проанализируй "Оригинальный текст" на предмет "воды", излишних эмоций, панибратства и нечетких формулировок.
-        2.  Сформируй блок "Что исправлено:", где кратко (2-3 пункта) перечисли основные проблемы оригинала.
-        3.  Создай ДВА улучшенных варианта текста:
-            -   **Вариант 1 (Строго-официальный):** Максимально формальный, сухой и уважительный стиль.
-            -   **Вариант 2 (Лаконично-деловой):** Краткий, энергичный, по делу, но все еще уважительный стиль.
-        4.  Отформатируй свой ответ строго по шаблону ниже, без каких-либо вступлений или заключений.
+        1. Проанализируй "Оригинальный текст".
+        2. Перепиши его в двух вариантах, подражая стилю из примеров выше.
+        3. Не выдумывай факты (не отменяй встречи, если об этом не просили).
+        4. Не используй слова вроде "Господин" (это архаизм), используй Имя Отчество.
 
         **Оригинальный текст:**
         ---
@@ -362,14 +424,14 @@ class MessageRewriter:
         **Твой ответ (строго по шаблону):**
         [START]
         **Что исправлено:**
-        - [Проблема 1]
-        - [Проблема 2]
+        - [Пункт 1]
+        - [Пункт 2]
 
         **Вариант 1 (Строго-официальный):**
-        [Текст варианта 1]
+        [Текст]
 
         **Вариант 2 (Лаконично-деловой):**
-        [Текст варианта 2]
+        [Текст]
         [END]
         """
         try:
@@ -422,7 +484,7 @@ db_manager = VectorDBManager(persist_directory=CHROMA_PERSIST_DIRECTORY, model_p
 
 # Создаем экземпляры сервисов, передавая им менеджер БД и провайдер модели
 report_validator = ReportValidator(db_manager, model_provider=model_provider)
-message_rewriter = MessageRewriter(model_provider=model_provider)
+message_rewriter = MessageRewriter(db_manager=db_manager, model_provider=model_provider)
 
 # Функция для первоначального наполнения БД
 def initialize_services():
