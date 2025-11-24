@@ -21,7 +21,7 @@ if [ ! -f /etc/debian_version ]; then
     exit 1
 fi
 
-echo -e "${GREEN}✓ Обнаружена система Debian$(cat /etc/debian_version)${NC}"
+echo -e "${GREEN}✓ Обнаружена система Debian $(cat /etc/debian_version)${NC}"
 echo ""
 
 # Обновление системы

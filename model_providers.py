@@ -77,11 +77,11 @@ class GigaChatProvider(ModelProvider):
 class OllamaProvider(ModelProvider):
     """Провайдер для использования локальной модели через Ollama."""
 
-    def __init__(self, model_name: str = "llama3.2"):
+    def __init__(self, model_name: str = None):
         try:
             from langchain_ollama import ChatOllama, OllamaEmbeddings
             
-            self.model_name = model_name
+            self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.2")
             self.llm = ChatOllama(model=self.model_name)
             self.embeddings = OllamaEmbeddings(model=self.model_name)
             logging.info(f"✅ Ollama провайдер успешно инициализирован с моделью: {self.model_name}")
@@ -109,13 +109,13 @@ class OllamaProvider(ModelProvider):
 class HuggingFaceProvider(ModelProvider):
     """Провайдер для использования локальных моделей через HuggingFace."""
 
-    def __init__(self, model_name: str = "IlyaGusev/saiga_llama3_8b"):
+    def __init__(self, model_name: str = None):
         try:
             from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
             from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
             import torch
             
-            self.model_name = model_name
+            self.model_name = model_name or os.getenv("HUGGINGFACE_MODEL", "IlyaGusev/saiga_llama3_8b")
             self.device = 0 if torch.cuda.is_available() else -1
             
             # Инициализация LLM для генерации текста

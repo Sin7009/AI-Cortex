@@ -8,17 +8,45 @@ langchain
 lark
 tiktoken
 
+# ============================================
 # Опциональные зависимости для локальных моделей
-# Раскомментируйте нужные строки в зависимости от выбранного провайдера
+# ============================================
+# Раскомментируйте нужную секцию в зависимости от выбранного провайдера:
 
-# Для Ollama (рекомендуется для Debian 12 VM)
+# --- Для Ollama (рекомендуется для Debian 12 VM) ---
+# Простая установка, хорошая производительность, легкое управление моделями
+# Используйте если: MODEL_PROVIDER=ollama
+#
 # langchain-ollama
 
-# Для HuggingFace моделей
+# --- Для HuggingFace моделей (для продвинутых пользователей) ---
+# Больше контроля, больше моделей, требуется GPU для хорошей производительности
+# Используйте если: MODEL_PROVIDER=huggingface
+#
 # langchain-huggingface
-# transformers
-# torch
-# accelerate
+# transformers>=4.35.0
+# torch>=2.0.0
+# accelerate>=0.24.0
 
-# Для квантизации моделей (экономия памяти)
-# bitsandbytes
+# --- Опционально: Квантизация для экономии памяти ---
+# Используйте для запуска больших моделей на меньшем железе
+#
+# bitsandbytes>=0.41.0
+
+# ============================================
+# Инструкции по установке:
+# ============================================
+# 
+# 1. Для GigaChat API (по умолчанию):
+#    pip install -r requirements.txt
+#
+# 2. Для Ollama на Debian 12:
+#    pip install -r requirements.txt
+#    pip install langchain-ollama
+#    bash setup_debian12.sh
+#
+# 3. Для HuggingFace:
+#    pip install -r requirements.txt
+#    pip install langchain-huggingface transformers torch accelerate
+#
+# Подробности: см. DEPLOYMENT.md
