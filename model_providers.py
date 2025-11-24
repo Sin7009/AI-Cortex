@@ -82,7 +82,10 @@ class OllamaProvider(ModelProvider):
             from langchain_ollama import ChatOllama, OllamaEmbeddings
             
             self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.2")
-            self.llm = ChatOllama(model=self.model_name)
+            self.llm = ChatOllama(
+                model=self.model_name,
+                temperature=0.2
+            )
             self.embeddings = OllamaEmbeddings(model=self.model_name)
             logging.info(f"✅ Ollama провайдер успешно инициализирован с моделью: {self.model_name}")
         except ImportError:
