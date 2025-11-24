@@ -11,9 +11,8 @@ __pycache__/
 venv/
 .venv/
 
-# uv
+# uv cache (but keep uv.lock for reproducible builds)
 .uv/
-uv.lock
 
 # ChromaDB persistence directory
 chroma_db/
