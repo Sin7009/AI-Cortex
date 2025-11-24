@@ -162,6 +162,40 @@ class VectorDBManager:
         if real_reports:
             self._populate_collection(self.reports_collection, real_reports)
 
+    def load_real_data(self):
+        """Загружает реальные файлы из папки knowledge_base."""
+        # 1. Загрузка сообщений (Примеры стиля)
+        real_messages = []
+        for filepath in glob.glob("knowledge_base/messages/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_messages.append({
+                        "id": f"msg_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла сообщения {filepath}: {e}")
+
+        if real_messages:
+            self._populate_collection(self.messages_collection, real_messages)
+
+        # 2. Загрузка отчетов (для валидации)
+        real_reports = []
+        for filepath in glob.glob("knowledge_base/reports/*.txt"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                    real_reports.append({
+                        "id": f"rep_{os.path.basename(filepath)}",
+                        "text": text
+                    })
+            except Exception as e:
+                logging.error(f"Ошибка при чтении файла отчета {filepath}: {e}")
+
+        if real_reports:
+            self._populate_collection(self.reports_collection, real_reports)
+
     def populate_databases(self):
         """Наполняет базы данных 'идеальными' отчетами и сообщениями."""
         # Наполняем mock-данными только если коллекции пусты
