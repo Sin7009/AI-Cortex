@@ -11,4 +11,3 @@ tiktoken
 langchain-openai
 langchain-huggingface
 sentence-transformers
-langchain-ollama
