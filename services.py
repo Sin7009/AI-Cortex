@@ -17,11 +17,11 @@ import chromadb
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from langchain_core.documents import Document
-from langchain_gigachat import GigaChat, GigaChatEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
 from mock_data import IDEAL_REPORTS, IDEAL_MESSAGES
+from model_providers import get_model_provider
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -71,13 +71,15 @@ class VectorDBManager:
     Управляет инициализацией и работой с векторной базой данных ChromaDB.
     """
 
-    def __init__(self, persist_directory: str):
+    def __init__(self, persist_directory: str, model_provider=None):
         self.persist_directory = persist_directory
         self.client = chromadb.PersistentClient(path=self.persist_directory)
-        self.embeddings_model = GigaChatEmbeddings(
-            credentials=os.getenv("GIGACHAT_API_KEY"),
-            verify_ssl_certs=False
-        )
+        
+        # Используем переданный провайдер или создаем новый
+        if model_provider is None:
+            model_provider = get_model_provider()
+        self.model_provider = model_provider
+        
         self.reports_collection = self.client.get_or_create_collection(name=REPORTS_COLLECTION)
         self.messages_collection = self.client.get_or_create_collection(name=MESSAGES_COLLECTION)
         logging.info(f"ChromaDB инициализирован в директории: {persist_directory}")
@@ -121,7 +123,7 @@ class VectorDBManager:
         for i in range(0, len(all_splits), batch_size):
             end = min(i + batch_size, len(all_splits))
             collection.add(
-                embeddings=self.embeddings_model.embed_documents(all_splits[i:end]),
+                embeddings=self.model_provider.embed_documents(all_splits[i:end]),
                 documents=all_splits[i:end],
                 ids=all_ids[i:end],
                 metadatas=all_metadatas[i:end]
@@ -136,7 +138,7 @@ class VectorDBManager:
 
     def query_reports(self, text: str, n_results: int = 1) -> list[str]:
         """Ищет похожие документы в коллекции отчетов."""
-        query_embedding = self.embeddings_model.embed_query(text)
+        query_embedding = self.model_provider.embed_query(text)
         results = self.reports_collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results
@@ -149,13 +151,14 @@ class ReportValidator:
     """
     Сервис для проверки отчетов. Использует RAG для сравнения с эталонами.
     """
-    def __init__(self, db_manager: VectorDBManager):
+    def __init__(self, db_manager: VectorDBManager, model_provider=None):
         self.db_manager = db_manager
-        self.llm = GigaChat(
-            credentials=os.getenv("GIGACHAT_API_KEY"),
-            verify_ssl_certs=False,
-            model="GigaChat-Pro"
-        )
+        
+        # Используем переданный провайдер или создаем новый
+        if model_provider is None:
+            model_provider = get_model_provider()
+        self.model_provider = model_provider
+        
         logging.info("Сервис ReportValidator инициализирован.")
 
     async def _get_validation_result(self, report_text: str, context_report: str) -> str:
@@ -204,8 +207,8 @@ class ReportValidator:
             **Статус:** [здесь напиши "Прошел" или "Требует доработки"]
             **Краткий анализ:** [здесь напиши 2-3 предложения с объяснением, что хорошо или что нужно улучшить, основываясь на критериях и сравнении с эталоном]
             """
-        response = await self.llm.ainvoke(prompt)
-        return response.content
+        response = await self.model_provider.ainvoke(prompt)
+        return response
 
     async def summarize(self, report_text: str) -> str:
         """Асинхронно генерирует Executive Summary для отчета."""
@@ -234,8 +237,8 @@ class ReportValidator:
 
         **Твой ответ:**
         """
-        response = await self.llm.ainvoke(prompt)
-        return response.content
+        response = await self.model_provider.ainvoke(prompt)
+        return response
 
     async def validate(self, report_text: str) -> dict[str, str]:
         """
@@ -281,12 +284,12 @@ class MessageRewriter:
     """
     Сервис для рерайтинга сообщений. Использует LLM для критики и предложения вариантов.
     """
-    def __init__(self):
-        self.llm = GigaChat(
-            credentials=os.getenv("GIGACHAT_API_KEY"),
-            verify_ssl_certs=False,
-            model="GigaChat-Pro"
-        )
+    def __init__(self, model_provider=None):
+        # Используем переданный провайдер или создаем новый
+        if model_provider is None:
+            model_provider = get_model_provider()
+        self.model_provider = model_provider
+        
         logging.info("Сервис MessageRewriter инициализирован.")
 
     def _is_crisis_communication(self, message_text: str) -> bool:
@@ -322,8 +325,8 @@ class MessageRewriter:
 
         **Твой ответ (строго по шаблону):**
         """
-        response = await self.llm.ainvoke(prompt)
-        return response.content
+        response = await self.model_provider.ainvoke(prompt)
+        return response
 
     async def rewrite(self, message_text: str) -> dict | None:
         """
@@ -370,15 +373,15 @@ class MessageRewriter:
         [END]
         """
         try:
-            logging.info("Отправка запроса в GigaChat для рерайтинга сообщения...")
-            response = await self.llm.ainvoke(prompt)
-            logging.info("Получен ответ от GigaChat.")
-            parsed_data = self._parse_rewrite_response(response.content)
+            logging.info("Отправка запроса в LLM для рерайтинга сообщения...")
+            response = await self.model_provider.ainvoke(prompt)
+            logging.info("Получен ответ от LLM.")
+            parsed_data = self._parse_rewrite_response(response)
             if parsed_data:
                 return {"type": "standard", "data": parsed_data}
             return None
         except Exception as e:
-            logging.error(f"Ошибка при вызове GigaChat API: {e}")
+            logging.error(f"Ошибка при вызове LLM API: {e}")
             return None
 
     def _parse_rewrite_response(self, response_text: str) -> dict[str, str] | None:
@@ -411,12 +414,15 @@ class MessageRewriter:
 
 
 # ---- Инициализация сервисов ----
-# Создаем единственный экземпляр менеджера БД
-db_manager = VectorDBManager(persist_directory=CHROMA_PERSIST_DIRECTORY)
+# Получаем провайдер модели на основе конфигурации
+model_provider = get_model_provider()
 
-# Создаем экземпляры сервисов, передавая им менеджер БД
-report_validator = ReportValidator(db_manager)
-message_rewriter = MessageRewriter()
+# Создаем единственный экземпляр менеджера БД с провайдером модели
+db_manager = VectorDBManager(persist_directory=CHROMA_PERSIST_DIRECTORY, model_provider=model_provider)
+
+# Создаем экземпляры сервисов, передавая им менеджер БД и провайдер модели
+report_validator = ReportValidator(db_manager, model_provider=model_provider)
+message_rewriter = MessageRewriter(model_provider=model_provider)
 
 # Функция для первоначального наполнения БД
 def initialize_services():

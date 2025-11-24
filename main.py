@@ -42,14 +42,28 @@ async def main() -> None:
 
     # Получаем токены из переменных окружения
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    gigachat_key = os.getenv("GIGACHAT_API_KEY")
+    model_provider = os.getenv("MODEL_PROVIDER", "ollama").lower()
 
-    if not telegram_token or not gigachat_key:
+    if not telegram_token:
         logging.critical(
-            "Не найдены необходимые токены в .env файле! "
-            "Убедитесь, что TELEGRAM_BOT_TOKEN и GIGACHAT_API_KEY установлены."
+            "Не найден TELEGRAM_BOT_TOKEN в .env файле! "
+            "Убедитесь, что TELEGRAM_BOT_TOKEN установлен."
         )
         return
+    
+    # Проверка конфигурации для выбранного провайдера
+    if model_provider == "gigachat":
+        gigachat_key = os.getenv("GIGACHAT_API_KEY")
+        if not gigachat_key:
+            logging.critical(
+                "MODEL_PROVIDER=gigachat, но GIGACHAT_API_KEY не найден в .env файле!"
+            )
+            return
+    elif model_provider == "ollama":
+        logging.info(
+            "Используется Ollama. Убедитесь, что Ollama запущен (ollama serve) "
+            "и модель загружена (ollama pull llama3.2)"
+        )
 
     # Инициализация бота и диспетчера
     bot_properties = DefaultBotProperties(parse_mode=ParseMode.HTML)
