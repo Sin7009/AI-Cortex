@@ -67,11 +67,11 @@ class OpenRouterProvider(ModelProvider):
             logging.info(f"⏳ Загрузка модели эмбеддингов на {device}...")
 
             self.embeddings = HuggingFaceEmbeddings(
-                model_name="intfloat/multilingual-e5-large",
+                model_name="intfloat/multilingual-e5-small",
                 model_kwargs={'device': device}
             )
 
-            logging.info(f"✅ OpenRouter провайдер готов: {model_name} + E5-Embeddings")
+            logging.info(f"✅ OpenRouter провайдер готов: {model_name} + E5-Embeddings (Small)")
 
         except ImportError:
             logging.error("❌ Не установлены пакеты. Выполните: pip install langchain-openai langchain-huggingface sentence-transformers")
