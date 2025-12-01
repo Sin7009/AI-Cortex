@@ -18,20 +18,15 @@ dependencies = [
     "lark",
     "tiktoken",
     "langchain-ollama",
+    "langchain-openai",
+    "langchain-huggingface",
+    "sentence-transformers",
 ]
 
 [project.optional-dependencies]
 # Для GigaChat API (внешний)
 gigachat = [
     "langchain-gigachat",
-]
-
-# Для HuggingFace моделей (для продвинутых пользователей)
-huggingface = [
-    "langchain-huggingface",
-    "transformers>=4.35.0",
-    "torch>=2.0.0",
-    "accelerate>=0.24.0",
 ]
 
 # Квантизация для экономии памяти
@@ -41,7 +36,7 @@ quantization = [
 
 # Все опциональные зависимости
 all = [
-    "ai-cortex[gigachat,huggingface,quantization]",
+    "ai-cortex[gigachat,quantization]",
 ]
 
 [project.urls]

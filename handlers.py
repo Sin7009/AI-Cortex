@@ -57,6 +57,12 @@ async def document_handler(message: Message, bot: Bot) -> None:
     file = message.document
     file_name = file.file_name or "unknown"
 
+    # Защита от OOM: проверяем размер файла (лимит 20 МБ)
+    file_size = file.file_size or 0
+    if file_size > 20 * 1024 * 1024:
+        await message.reply("Файл слишком большой. Максимальный размер — 20 МБ.")
+        return
+
     if not (file_name.lower().endswith(".docx") or file_name.lower().endswith(".pdf")):
         await message.reply("Пожалуйста, отправьте файл в формате .docx или .pdf.")
         return
