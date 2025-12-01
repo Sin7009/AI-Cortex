@@ -389,11 +389,13 @@ class MessageRewriter:
         loop = asyncio.get_running_loop()
         try:
              # Эмбеддинг запроса для поиска похожих по стилю/смыслу
-            query_embedding = self.model_provider.embed_query(message_text)
+            # query_embedding = self.model_provider.embed_query(message_text) # Убрали блокирующий вызов
+
+            # Вся тяжелая работа (эмбеддинг + поиск) теперь в отдельном потоке
             results = await loop.run_in_executor(
                 None,
                 lambda: self.db_manager.messages_collection.query(
-                    query_embeddings=[query_embedding],
+                    query_embeddings=[self.model_provider.embed_query(message_text)],
                     n_results=3
                 )
             )
