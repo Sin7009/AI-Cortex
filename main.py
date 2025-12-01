@@ -9,28 +9,54 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from handlers import register_handlers
-from services import initialize_services
+from middlewares.auth import AuthMiddleware
+from model_providers import get_model_provider
+from database.chroma_manager import VectorDBManager
+from services.validator import ReportValidator
+from services.rewriter import MessageRewriter
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Глобальные переменные для сервисов (чтобы on_startup имел к ним доступ или инициализировал их)
+db_manager = None
+report_validator = None
+message_rewriter = None
 
-async def on_startup() -> None:
+async def initialize_app_services():
     """
-    Функция, выполняемая при запуске бота.
-    Инициализирует все необходимые сервисы, в т.ч. базу данных.
+    Инициализирует сервисы приложения.
     """
-    logging.info("Бот запускается...")
-    try:
-        initialize_services()
-        logging.info("Сервисы успешно инициализированы.")
-    except Exception as e:
-        logging.critical(f"Не удалось инициализировать сервисы: {e}", exc_info=True)
-        # В реальном проекте здесь можно было бы остановить запуск,
-        # но для простоты мы просто логируем критическую ошибку.
+    global db_manager, report_validator, message_rewriter
+
+    # Загружаем переменные окружения
+    load_dotenv()
+
+    # 1. Провайдер модели
+    model_provider = get_model_provider()
+
+    # 2. База данных
+    # Убедимся, что директории созданы
+    os.makedirs("chroma_db", exist_ok=True)
+    os.makedirs("knowledge_base", exist_ok=True)
+
+    db_manager = VectorDBManager(persist_directory="chroma_db", model_provider=model_provider)
+
+    # 3. Наполнение базы (синхронно или в треде, но ChromaDB клиент обычно синхронный)
+    # Здесь populate_databases делает тяжелую работу
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, db_manager.populate_databases)
+
+    # 4. Бизнес-сервисы
+    report_validator = ReportValidator(db_manager, model_provider=model_provider)
+    message_rewriter = MessageRewriter(db_manager=db_manager, model_provider=model_provider)
+
+    logging.info("Сервисы успешно инициализированы.")
+    return report_validator, message_rewriter
 
 
 async def main() -> None:
@@ -42,7 +68,7 @@ async def main() -> None:
 
     # Получаем токены из переменных окружения
     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    model_provider = os.getenv("MODEL_PROVIDER", "ollama").lower()
+    bot_password = os.getenv("BOT_PASSWORD", "secret123") # Дефолтный пароль, если не задан
 
     if not telegram_token:
         logging.critical(
@@ -50,31 +76,29 @@ async def main() -> None:
             "Убедитесь, что TELEGRAM_BOT_TOKEN установлен."
         )
         return
-    
-    # Проверка конфигурации для выбранного провайдера
-    if model_provider == "gigachat":
-        gigachat_key = os.getenv("GIGACHAT_API_KEY")
-        if not gigachat_key:
-            logging.critical(
-                "MODEL_PROVIDER=gigachat, но GIGACHAT_API_KEY не найден в .env файле!"
-            )
-            return
-    elif model_provider == "ollama":
-        logging.info(
-            "Используется Ollama. Убедитесь, что Ollama запущен (ollama serve) "
-            "и модель загружена (ollama pull llama3.2)"
-        )
 
     # Инициализация бота и диспетчера
     bot_properties = DefaultBotProperties(parse_mode=ParseMode.HTML)
     bot = Bot(token=telegram_token, default=bot_properties)
-    dp = Dispatcher()
 
-    # Регистрация обработчиков
-    register_handlers(dp)
+    # Используем MemoryStorage для FSM (хранение состояний авторизации)
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
 
-    # Добавляем задачу на запуск при старте
-    dp.startup.register(on_startup)
+    # Регистрируем Middleware авторизации
+    auth_middleware = AuthMiddleware(password=bot_password)
+    dp.message.outer_middleware(auth_middleware)
+
+    # Инициализируем сервисы перед запуском
+    logging.info("Инициализация сервисов...")
+    try:
+        validator, rewriter = await initialize_app_services()
+    except Exception as e:
+        logging.critical(f"Ошибка инициализации сервисов: {e}", exc_info=True)
+        return
+
+    # Регистрация обработчиков с передачей сервисов
+    register_handlers(dp, validator, rewriter)
 
     # Запускаем бота
     logging.info("Начинаем polling...")

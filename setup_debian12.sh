@@ -135,10 +135,13 @@ if [ ! -f ".env" ]; then
     echo ""
     echo "📝 Настройка файла .env..."
     read -p "Введите ваш Telegram Bot Token: " telegram_token
-    
+    read -p "Установите пароль для доступа к боту (или нажмите Enter для 'secret123'): " bot_password
+    bot_password=${bot_password:-secret123}
+
     cat > .env << EOF
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=$telegram_token
+BOT_PASSWORD=$bot_password
 
 # Model Provider Configuration
 MODEL_PROVIDER=ollama
