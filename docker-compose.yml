@@ -1,0 +1,24 @@
+services:
+  cortex-bot:
+    build: .
+    container_name: cortex-bot
+    restart: always
+    volumes:
+      # Персистентность векторной базы
+      - chroma_db_data:/app/chroma_db
+      # Подключаем .env файл с хоста
+      - ./.env:/app/.env
+      # (Опционально) Если вы хотите обновлять базу знаний без пересборки образа,
+      # раскомментируйте следующую строку:
+      # - ./knowledge_base:/app/knowledge_base
+    environment:
+      # Переопределяем URL для доступа к Ollama на хосте
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      # Явно указываем провайдера (хотя он есть в .env, здесь для наглядности)
+      - MODEL_PROVIDER=ollama
+    extra_hosts:
+      # Магия для доступа к хосту из контейнера (Linux)
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  chroma_db_data:
