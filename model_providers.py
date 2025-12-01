@@ -44,7 +44,7 @@ class OpenRouterProvider(ModelProvider):
 
             # 1. Настройка LLM (Grok)
             api_key = os.getenv("OPENROUTER_API_KEY")
-            model_name = os.getenv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast:free")
+            model_name = os.getenv("OPENROUTER_MODEL")
             
             if not api_key:
                 raise ValueError("Не найден OPENROUTER_API_KEY в .env")
