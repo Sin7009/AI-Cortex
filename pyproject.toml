@@ -21,7 +21,6 @@ dependencies = [
     "langchain-openai",
     "langchain-huggingface",
     "sentence-transformers",
-    "aiofiles>=23.2.0",
 ]
 
 [project.optional-dependencies]

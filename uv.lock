@@ -13,7 +13,6 @@ name = "ai-cortex"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "aiofiles" },
     { name = "aiogram" },
     { name = "chromadb" },
     { name = "langchain" },
@@ -43,7 +42,6 @@ quantization = [
 [package.metadata]
 requires-dist = [
     { name = "ai-cortex", extras = ["gigachat", "quantization"], marker = "extra == 'all'" },
-    { name = "aiofiles", specifier = ">=23.2.0" },
     { name = "aiogram", specifier = ">=3.2.0" },
     { name = "bitsandbytes", marker = "extra == 'quantization'", specifier = ">=0.41.0" },
     { name = "chromadb" },
