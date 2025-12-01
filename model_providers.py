@@ -67,11 +67,11 @@ class OpenRouterProvider(ModelProvider):
             logging.info(f"⏳ Загрузка модели эмбеддингов на {device}...")
 
             self.embeddings = HuggingFaceEmbeddings(
-                model_name="intfloat/multilingual-e5-large",
+                model_name="intfloat/multilingual-e5-small",
                 model_kwargs={'device': device}
             )
 
-            logging.info(f"✅ OpenRouter провайдер готов: {model_name} + E5-Embeddings")
+            logging.info(f"✅ OpenRouter провайдер готов: {model_name} + E5-Embeddings (Small)")
 
         except ImportError:
             logging.error("❌ Не установлены пакеты. Выполните: pip install langchain-openai langchain-huggingface sentence-transformers")
@@ -119,9 +119,20 @@ class OllamaProvider(ModelProvider):
         try:
             from langchain_ollama import ChatOllama, OllamaEmbeddings
             self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.2")
-            self.llm = ChatOllama(model=self.model_name, temperature=0.2)
-            self.embeddings = OllamaEmbeddings(model=self.model_name)
-            logging.info(f"✅ Ollama провайдер успешно инициализирован: {self.model_name}")
+
+            # Явно получаем URL, что критично для работы из Docker
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+            self.llm = ChatOllama(
+                model=self.model_name,
+                temperature=0.2,
+                base_url=base_url
+            )
+            self.embeddings = OllamaEmbeddings(
+                model=self.model_name,
+                base_url=base_url
+            )
+            logging.info(f"✅ Ollama провайдер успешно инициализирован: {self.model_name} (URL: {base_url})")
         except Exception as e:
             logging.error(f"❌ Ошибка Ollama: {e}")
             raise
