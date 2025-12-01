@@ -6,6 +6,7 @@ import logging
 import os
 import asyncio
 import uuid
+import aiofiles
 from functools import partial
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -13,16 +14,32 @@ from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
     CallbackQuery,
-    ContentType,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
 from aiogram.utils.markdown import hbold
 
-from services import report_validator, message_rewriter, parse_docx, parse_pdf
+# Импортируем из новых мест
+from services.validator import ReportValidator
+from services.rewriter import MessageRewriter
+from utils.file_parsers import parse_docx, parse_pdf
 
 # Создаем роутер для обработчиков
 router = Router()
+
+# Глобальные сервисы будут инжектироваться или импортироваться
+# Для простоты, мы будем использовать Dependency Injection через data в middleware или инициализацию в main
+# Но чтобы не ломать сигнатуры хендлеров слишком сильно, будем ожидать их в аргументах или использовать глобальные пока
+# Лучшая практика: передавать через middleware или использовать глобальные переменные модуля, инициализированные в main.
+# Здесь мы предполагаем, что сервисы будут доступны.
+# Для упрощения рефакторинга: мы создадим placeholder переменные, которые main.py заполнит,
+# или просто сделаем их доступными через импорт, если они синглтоны.
+# В данном случае, лучше передавать их в register_handlers или сделать глобальными на уровне модуля,
+# инициализируемыми из main.
+
+# Временное решение: глобальные переменные, которые инициализирует main
+report_validator: ReportValidator = None
+message_rewriter: MessageRewriter = None
 
 # ---- Вспомогательные функции ----
 def create_rewrite_keyboard(variant1_text: str, variant2_text: str) -> InlineKeyboardMarkup:
@@ -57,6 +74,12 @@ async def document_handler(message: Message, bot: Bot) -> None:
     file = message.document
     file_name = file.file_name or "unknown"
 
+    # Защита от OOM: проверяем размер файла (лимит 20 МБ)
+    file_size = file.file_size or 0
+    if file_size > 20 * 1024 * 1024:
+        await message.reply("Файл слишком большой. Максимальный размер — 20 МБ.")
+        return
+
     if not (file_name.lower().endswith(".docx") or file_name.lower().endswith(".pdf")):
         await message.reply("Пожалуйста, отправьте файл в формате .docx или .pdf.")
         return
@@ -73,9 +96,9 @@ async def document_handler(message: Message, bot: Bot) -> None:
         await bot.download(file=file.file_id, destination=tmp_file_path)
         logging.info(f"Файл '{file_name}' временно сохранен в '{tmp_file_path}'.")
 
-        # Читаем файл с диска для парсинга
-        with open(tmp_file_path, "rb") as f:
-            file_content_bytes = f.read()
+        # Читаем файл с диска асинхронно
+        async with aiofiles.open(tmp_file_path, "rb") as f:
+            file_content_bytes = await f.read()
 
         # Парсим в зависимости от типа, вынося в отдельный поток
         loop = asyncio.get_running_loop()
@@ -86,23 +109,27 @@ async def document_handler(message: Message, bot: Bot) -> None:
             text = await loop.run_in_executor(None, partial(parse_docx, file_content_bytes))
 
         # Валидируем и получаем саммари
-        result = await report_validator.validate(text)
+        if report_validator:
+            result = await report_validator.validate(text)
 
-        # Формируем красивый ответ
-        response_text = (
-            f"{result['validation']}\n\n"
-            f"--- 🏛️ Executive Summary ---\n"
-            f"{result['summary']}"
-        )
-        await message.reply(response_text)
+            # Формируем красивый ответ
+            response_text = (
+                f"{result['validation']}\n\n"
+                f"--- 🏛️ Executive Summary ---\n"
+                f"{result['summary']}"
+            )
+            await message.reply(response_text)
+        else:
+            logging.error("ReportValidator не инициализирован!")
+            await message.reply("Сервис временно недоступен.")
 
     except Exception as e:
         logging.error(f"Критическая ошибка при обработке файла {file_name}: {e}")
         await message.reply("Произошла непредвиденная ошибка. Попробуйте еще раз позже.")
     finally:
-        # Гарантированно удаляем временный файл
+        # Гарантированно удаляем временный файл асинхронно
         if os.path.exists(tmp_file_path):
-            os.remove(tmp_file_path)
+            await asyncio.to_thread(os.remove, tmp_file_path)
             logging.info(f"Временный файл '{tmp_file_path}' удален.")
 
 
@@ -114,9 +141,17 @@ async def text_message_handler(message: Message) -> None:
     if not message.text:
         return
 
+    # Игнорируем ввод пароля, если он просочился через middleware (на всякий случай)
+    # Но middleware должен перехватить.
+
     await message.reply("Анализирую ваше сообщение...")
 
-    result = await message_rewriter.rewrite(message.text)
+    if message_rewriter:
+        result = await message_rewriter.rewrite(message.text)
+    else:
+        logging.error("MessageRewriter не инициализирован!")
+        await message.reply("Сервис временно недоступен.")
+        return
 
     if result is None:
         await message.reply("К сожалению, не удалось обработать ваше сообщение. Попробуйте переформулировать его.")
@@ -167,8 +202,12 @@ async def rewrite_callback_handler(callback_query: CallbackQuery):
         f"Отлично! Вы выбрали вариант {option_number}. Этот выбор будет учтен в будущем."
     )
 
-def register_handlers(dp: Dispatcher):
+def register_handlers(dp: Dispatcher, validator: ReportValidator, rewriter: MessageRewriter):
     """
-    Регистрирует все обработчики в главном диспетчере.
+    Регистрирует все обработчики в главном диспетчере и инициализирует сервисы.
     """
+    global report_validator, message_rewriter
+    report_validator = validator
+    message_rewriter = rewriter
+
     dp.include_router(router)

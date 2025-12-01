@@ -1,0 +1,17 @@
+services:
+  ai-cortex:
+    build: .
+    container_name: ai_cortex_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      # Сохраняем базу знаний при перезапусках
+      - chroma_data:/app/chroma_db
+      # Можно прокинуть логи наружу, если нужно
+      # - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  chroma_data:
