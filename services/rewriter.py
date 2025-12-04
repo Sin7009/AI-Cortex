@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser
 from model_providers import get_model_provider
 from database.chroma_manager import VectorDBManager
+from services.cognitive_layer import CognitiveScaffolder, ProblemType
 
 # 1. Определяем структуру ответа
 class RewriteResponse(BaseModel):
@@ -24,6 +25,10 @@ class MessageRewriter:
 
         # Инициализируем парсер
         self.parser = PydanticOutputParser(pydantic_object=RewriteResponse)
+
+        # Инициализация скаффолдера
+        self.scaffolder = CognitiveScaffolder()
+
         logging.info("Сервис MessageRewriter инициализирован.")
 
     def _is_crisis_communication(self, message_text: str) -> bool:
@@ -122,9 +127,13 @@ class MessageRewriter:
         {message_text}
         ---
         """
+
+        # ВНЕДРЕНИЕ: Оборачиваем промпт в Design-протокол
+        enhanced_prompt = self.scaffolder.enhance_prompt(prompt, ProblemType.DESIGN)
+
         try:
             logging.info("Отправка запроса в LLM для рерайтинга сообщения...")
-            response = await self.model_provider.ainvoke(prompt)
+            response = await self.model_provider.ainvoke(enhanced_prompt)
             logging.info("Получен ответ от LLM.")
 
             # Парсим JSON-ответ в объект Pydantic

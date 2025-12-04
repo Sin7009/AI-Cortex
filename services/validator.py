@@ -3,6 +3,7 @@ import asyncio
 import logging
 from model_providers import get_model_provider
 from database.chroma_manager import VectorDBManager
+from services.cognitive_layer import CognitiveScaffolder, ProblemType
 
 class ReportValidator:
     """
@@ -14,6 +15,9 @@ class ReportValidator:
         if model_provider is None:
             model_provider = get_model_provider()
         self.model_provider = model_provider
+
+        # Инициализация скаффолдера
+        self.scaffolder = CognitiveScaffolder()
 
         logging.info("Сервис ReportValidator инициализирован.")
 
@@ -61,7 +65,11 @@ class ReportValidator:
             **Статус:** [здесь напиши "Прошел" или "Требует доработки"]
             **Краткий анализ:** [здесь напиши 2-3 предложения с объяснением, что хорошо или что нужно улучшить, основываясь на критериях и сравнении с эталоном]
             """
-        response = await self.model_provider.ainvoke(prompt)
+
+        # ВНЕДРЕНИЕ: Оборачиваем готовый промпт
+        enhanced_prompt = self.scaffolder.enhance_prompt(prompt, ProblemType.DIAGNOSIS)
+
+        response = await self.model_provider.ainvoke(enhanced_prompt)
         return response
 
     async def summarize(self, report_text: str) -> str:
